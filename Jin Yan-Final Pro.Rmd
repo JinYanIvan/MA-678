@@ -1,0 +1,383 @@
+---
+title: "Final Project"
+author: "Jin Yan"
+date: "2022-12-01"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(base)
+library(PerformanceAnalytics)
+library(lmerTest)
+library(rstanarm)
+library(lme4)
+library(merTools)
+library(gridExtra)
+library(devtools)
+library(lattice)
+```
+
+
+
+## Abstract
+
+The full name of IMBD is Internet Movie Database, which has a wealth of information about movie works, including basic information such as movie actors, directors, plots, and movie reviews, as well as deeper movie revenue and other content. It is an authoritative movie data organization. Increasingly, the movie box office has become an excellent basis for judging whether a movie is good or bad. This year's movie "Top Gun 2" won the annual box office champion with a box office of 1.4 billion US dollars, which aroused my interest in exploring the factors that affect the box office: what factors will Is it the year of release that affects the trend of the movie box office? Online evaluation? Or a movie genre? In order to clarify this problem, I built a multi-layer data set with movie type and release year as the data set to explore the influencing factors of movie box office, and found that IMBD score and movie type will affect the box office trend. For example, medium-length action movies have always been The box office leader, but the metacritic score has no positive impact on the box office, this report analyzes through introduction, methods, results, and discussion.
+
+## Introducation
+
+Usually, the box office of a movie is related to the plot and content of the movie. However, due to the mixed evaluations of movies by movie fans, the evaluation of movie fans after watching usually affects the viewing decision of fans who have not watched the movie. One of the important factors for sustainable development. Usually, movies with high ratings will get higher box office. For example, the IMBD score of "TOP GUN 2" is 8.0. The higher rating also makes it the annual box office champion, but there are still movies The score is better, but the box office is not satisfactory, so we have to consider the impact of the movie content, that is, the type of movie, on the movie box office. Generally speaking, movies that make people adrenaline soar, such as action movies and science fiction movies, have novel content and shocking pictures. , it will bring a good box office, but although some movies have better special effects, their box office is lower.
+Therefore, I decided to introduce a multi-level model to find out the impact of fixed effects (such as multi-site ratings, movie duration, number of votes, etc.) and random effects (movie type, release year)
+
+\newpage
+
+## Methods
+
+### Data clean
+I downloaded the IMBD data from kaggle: https://www.kaggle.com/datasets/preetviradiya/imdb-movies-ratings-details. This data records the detailed data of 1000 movies from 1925 to 2018. Since the years are too long, I rearranged the release time of the movies, that is, the release time of movies during 1920-1930 is 1920s, and so on. In addition, the data Without considering the quarterly impact factors, two website scores were introduced: IMBD and Metacritic scores, and the number of votes was counted.
+
+
+| column names      | explanation                      |
+| :--:              | :-----                           |
+| X                 | Movie ID                         |
+| name              | Name of the movie                |
+| year              | Year of release                  |
+| runtime           | Movie runtime                    |
+| genre1            | Movie Genre                      |
+| rating            | IMDB Ratings                     |
+| metascore         | Metascore on IMDB                |
+| timeline          | Short storyline of the movie     |
+| votes             | Total votes earned on IMDB       |
+| gross             | Box-office grossings             |
+| decade            | decade of release                |
+
+
+\newpage
+
+```{r include=FALSE}
+data_original<-read.csv("IMDB_movie_reviews_details.csv",header=T)
+data<-separate(data_original,genre,sep=",",into=c("genre1","genre2","genre3"))
+data<-subset(data,select=-c(genre2,genre3))
+data<-na.omit(data)
+unique(data$genre1)
+data<-data %>% filter(gross!="") %>%
+  arrange(by_group=genre1)
+data$gross<-gsub('[$]','',data$gross)
+data$gross<-gsub('[M]','',data$gross)
+data$gross<-as.numeric(data$gross)
+data$runtime<-as.numeric(data$runtime)
+data$rating<-as.numeric(data$rating)
+data$metascore<-as.numeric(data$metascore)
+data$votes<-gsub(",","",data$votes)
+data$votes<-as.numeric(as.character(data$votes))
+data$year<-gsub("I","",data$year)
+data$year<-gsub("II","",data$year)
+data$year<-gsub("III","",data$year)
+data$year<-gsub(" ","",data$year)
+typeof(data$year)
+
+year_1920s<-data %>% filter(year==1920|year==1921|year==1922|year==1923|year==1924|year==1925|year==1926|year==1927|year==1928|year==1929) %>% mutate(decade="1920s")
+year_1930s<-data %>% filter(year==1930|year==1931|year==1932|year==1933|year==1934|year==1935|year==1936|year==1937|year==1938|year==1939) %>% mutate(decade="1930s")
+year_1940s<-data %>% filter(year==1940|year==1941|year==1942|year==1943|year==1944|year==1945|year==1946|year==1947|year==1948|year==1949) %>% mutate(decade="1940s")
+year_1950s<-data %>% filter(year==1950|year==1951|year==1952|year==1953|year==1954|year==1955|year==1956|year==1957|year==1958|year==1959) %>% mutate(decade="1950s")
+year_1960s<-data %>% filter(year==1960|year==1961|year==1962|year==1963|year==1964|year==1965|year==1966|year==1967|year==1968|year==1969) %>% mutate(decade="1960s")
+year_1970s<-data %>% filter(year==1970|year==1971|year==1972|year==1973|year==1974|year==1975|year==1976|year==1977|year==1978|year==1979) %>% mutate(decade="1970s")
+year_1980s<-data %>% filter(year==1980|year==1981|year==1982|year==1983|year==1984|year==1985|year==1986|year==1987|year==1988|year==1989) %>% mutate(decade="1980s")
+year_1990s<-data %>% filter(year==1990|year==1991|year==1992|year==1993|year==1994|year==1995|year==1996|year==1997|year==1998|year==1999) %>% mutate(decade="1990s")
+year_2000s<-data %>% filter(year==2000|year==2001|year==2002|year==2003|year==2004|year==2005|year==2006|year==2007|year==2008|year==2009) %>% mutate(decade="2000s")
+year_2010s<-data %>% filter(year==2010|year==2011|year==2012|year==2013|year==2014|year==2015|year==2016|year==2017|year==2018|year==2019) %>% mutate(decade="2010s")
+data<-rbind(year_1920s,year_1930s,year_1940s,year_1950s,year_1960s,year_1970s,year_1980s,year_1990s,year_2000s,year_2010s)
+
+
+```
+
+By aforementioned part, I've got a `data` with 747 observations and 11 variables,I try to figure out whether or not to use the 11 variables.
+
+### Average data
+```{r include=FALSE}
+average_data_genre <- data %>% group_by(genre1) %>%
+  summarise(runtime           = round(mean(runtime)     , digits = 1), 
+            rating            = round(mean(rating)      , digits = 1), 
+            metascore         = round(mean(metascore)   , digits = 1), 
+            votes             = round(mean(votes)       , digits = 1),
+            gross             = round(mean(gross)       , digits = 1)
+  )
+
+average_data_decade <- data %>% group_by(decade) %>%
+  summarise(runtime           = round(mean(runtime)     , digits = 1), 
+            rating            = round(mean(rating)      , digits = 1), 
+            metascore         = round(mean(metascore)   , digits = 1), 
+            votes             = round(mean(votes)       , digits = 1),
+            gross             = round(mean(gross)       , digits = 1)
+  )
+average_data_genre
+average_data_decade
+```
+
+
+### genre data vs decade graphs
+```{r include=FALSE}
+runtime_by_genre <- ggplot(data = data) + 
+  aes(x = log(runtime + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(genre1)), size = .6) + 
+  geom_smooth(aes(color = factor(genre1)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Runtime", x = "log(average runtime)", y = "log(gross)")
+
+rating_by_genre <- ggplot(data = data) + 
+  aes(x = log(rating + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(genre1)), size = .6) + 
+  geom_smooth(aes(color = factor(genre1)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Rating", x = "log(average rating)", y = "log(gross)")
+
+
+
+###decade group
+runtime_by_decade <- ggplot(data = data) + 
+  aes(x = log(runtime + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(decade)), size = .6) + 
+  geom_smooth(aes(color = factor(decade)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Runtime", x = "log(average runtime)", y = "log(gross)")
+
+
+rating_by_decade <- ggplot(data = data) + 
+  aes(x = log(rating + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(decade)), size = .6) + 
+  geom_smooth(aes(color = factor(decade)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Rating", x = "log(average rating)", y = "log(gross)")
+
+```
+
+
+```{r}
+grid.arrange(runtime_by_genre, runtime_by_decade, ncol = 2)
+```
+
+
+
+Figure 1 illustrates the relationship between gross and average runtime, while fig(a) is in genre level and fig(b) is in decade level. However, whatever the level, gross show the increasing trend as runtime going up. And in different genre and decade, the intercepts and slopes show slights differences. After I draw the graph of gross versus metascore, votes, the figures are quite similar. Thus I put them in the appendix. 
+
+```{r}
+grid.arrange(rating_by_genre, rating_by_decade, ncol = 2)
+
+```
+Figure 2 shows the correlation between gross and rating. Similarly, figure(a) is in genre level while figure(b) is in decade level. But the result is very strange. In the middle of the twentieth century, the ratings of movies were inversely proportional to the box office, and the ratings of some types of movies were also inversely proportional to the box office, such as western movies and crime movies.
+
+
+### Gross for genre/decade distribution
+```{r include=FALSE}
+genre_all_gross<-data %>% dplyr::select(genre1,gross) %>% group_by(genre1) %>%
+  mutate(all_gross=sum(gross)) %>% 
+  dplyr::select(genre1,all_gross) %>%
+  unique()
+
+ggplot(genre_all_gross) +
+  aes(x = genre1, y = all_gross) +
+  geom_col(fill = "#FF8C00") +
+  theme_bw()
+
+decade_all_gross<-data %>% dplyr::select(decade,gross) %>% group_by(decade) %>% mutate(all_gross=sum(gross))%>%
+  dplyr::select(-gross) %>%
+  unique()
+
+ggplot(decade_all_gross) +
+  aes(x = decade, y = all_gross) +
+  geom_col(fill = "#FF8C00") +
+  theme_bw()
+
+boxplot(gross~genre1,data=data, main="Gross data",
+   xlab="Genre of Movie", ylab="Gross")
+
+boxplot(gross~decade,data=data, main="Gross data",
+   xlab="decade of Movie", ylab="Gross")
+
+```
+
+I found the gross are highly correlated with decade, I thought may be the rising in social incomes.
+
+## Model fitting
+
+Since different movie genres and decades have a considerable impact on the model, I decided to use a multilevel model to fit the data. Since all variables are more or less skewed and have heavy tails, I use log(variable + 1) to create new variables. See the appendix of this report for the original distribution diagram of all variables. For the next step, I plot the Pearson correlation matrix for predictor selection.
+
+### Model fitting data summarize
+```{r include=FALSE}
+log_data<-data %>% dplyr::select(decade,genre1,runtime,rating,metascore,votes,gross) %>% data.frame()
+log_data$genre1<-as.factor(log_data$genre1)
+log_data$decade<-as.factor(log_data$decade)
+log_data$runtime<-log(log_data$runtime +1)
+log_data$rating<-log(log_data$rating +1)
+log_data$metascore<-log(log_data$metascore +1)
+log_data$votes<-log(log_data$votes +1)
+log_data$gross<-log(log_data$gross +1)
+```
+
+###correlation between 
+```{r echo=FALSE, fig.height=5, fig.width=7,fig.cap="Correlation Matrix"}
+chart.Correlation(log_data[3:7],histogram=TRUE,pch=20)
+```
+
+
+From the graphs,I decides to use the all variables to fit my model
+
+### Model Fitting
+```{r}
+model <- lmer(gross~runtime+rating+metascore+votes
+              +(1+votes+rating+runtime|genre1)+
+                (1+metascore|decade),
+              data=log_data)
+
+
+```
+
+Due to the results of the model, I founld the variable of metascore is not significant, so i remove it to fit my model.Here is the summary of model(fixed effect) and all variables here are considered as statistically significant at $\alpha$ = 0.5 level. To be more clear, a fixed effect parameters are also include
+
+|                |Estimate   |Std. Error  |df        |t value |Pr(>&#124;t&#124;) |
+|:---:           |:---:      |:---:       |:---:     |:---:   |:---:              |
+|(Intercept)     |29.24      |5.12        |581.38    |5.71    |0.00 ***           |
+|log_runtime     |1.62       |0.33        |8.90      |5.00    |0.00 ***           |
+|log_rating      |-21.35     |2.04        |65.90     |-10.45  |0.00 ***           |
+|log_metascore   |-0.80      |0.71        |629.92    |-1.13   |0.26               |
+|log_votes       |1.35       |0.12        |7.29      |11.11   |0.00 ***           |
+
+
+
+```{r echo=FALSE, fig.height=4, fig.width=6, fig.cap="Fixed Effect of gross Model"}
+
+plotFEsim(FEsim(model, n.sims = 100), level = 0.9, stat = 'median', intercept = FALSE)
+
+
+```
+
+And the following tables are the summary of random effects. The first one is random effect of movie genre and the second one is movie decade.
+
+```{r}
+round(ranef(model)$genre1, digits = 2)[1:14, ]
+```
+
+```{r}
+round(ranef(model)$decade, digits = 2)
+```
+
+```{r echo=FALSE, fig.height=5, fig.width=8, fig.cap="Random Effect of gross Model"}
+genre1_level <- REsim(model, n.sims = 1000) %>% filter(groupFctr == "genre1")
+genre1_level$term <- factor(genre1_level$term); genre1_level$groupID <- factor(genre1_level$groupID)
+ggplot(genre1_level) + 
+  geom_pointrange(aes(x = groupID, y = mean, ymax = mean+2*sd, ymin = mean-2*sd, group = term, color = term)) +
+  facet_wrap(~term, ncol = 3) + ylab("Random Effect") + xlab("genre1") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7)) + theme(legend.position = "none")
+
+
+```
+
+Additionally, a random effect plot for `genre` level are included.  we can come to the conclusion that baseline of gross for each genre are quite different. This exactly verify that animation movies are willing to get a higher gross. Another parameter that differs most is `decade`, which means 1960s is a The heyday of cinema.
+
+
+\newpage
+
+## Result
+
+### Interpretation
+
+we are able to get the following formula of fixed effect: 
+$$ log(gross + 1) = 29.24 +  1.62\times log(runtime + 1) - 21.35 \times log(rating + 1) + 1.35 \times log(votes + 1) $$ 
+Then add the random effect to the intercepts and slopes and get the estimated formula:
+$$ log(gross + 1) = 102.21 + 2.13 \times log(runtime + 1) -5.46 \times log(rating + 1) + 1.46 \times log(votes + 1) $$ 
+In the formula, all parameters except rating are positive, which means that the duration of the movie and the number of votes have a positive impact on the box office of the movie. Looking at the rating, the better the score, the lower the box office may be related to the malicious accusation of the movie. Therefore The negative impact of rating on the box office is reasonable. In the model, for every 1% increase in gross, runtime will increase by 2.13%, and for every 1% increase in gross, voting will increase by 1.46%.
+
+### Model Checking
+
+```{r echo=FALSE, fig.height=4, fig.width=8, fig.cap="Residual plot and Q-Q plot."}
+residul_plot <- plot(model)
+qq_plot      <- qqmath(model)
+grid.arrange(residul_plot, qq_plot, ncol = 2)
+```
+
+The left plot of Figure 8 is residual plot and the right one is residual Q-Q plot. According to it, the mean value of residuals is approximately 0. Yet as the fitted value close to 0, there's no negative residuals. This phenomenon can be explained by there exists clear lower bound for actual gross and when we make prediction with multilevel model, that would not happen. As for Q-Q plot in Figure 8, majority points except tail ones are on the normal distribution line, thus the normality check is acceptable. 
+
+
+## Discussion
+
+In this report, we use a multi-level model to calculate the relationship between the box office of a movie and several basic details of the movie. In addition, the model also considers two levels: the genre of the movie and the release period of the movie. Generally speaking, from the perspective of fixed effects, movie ratings and fans’ votes have a positive impact on the movie’s box office, and ratings have a negative impact. The better, no matter in terms of movie type or release year, such factors are reasonable, and the final model explanation is also very good.
+
+However, this report also has some limitations. First of all, the data sets I constructed included World War II, post-war economic reconstruction, the Cold War, and the period of rapid economic development. These off-site factors will have a greater impact and influence on the film industry, especially It is the epidemic in recent years, which also has a great impact on the box office of movies, so I should choose different movies in the same period for analysis and fit a multi-level model.
+
+
+\newpage
+
+## Appendix
+
+### Variable distributions
+
+```{r include=FALSE}
+dist_gross<-ggplot(data) +
+  aes(x = gross) +
+  geom_histogram(aes(y=..density..),bins = 30L, fill = "#B22222") +
+  geom_density(lwd=1,alpha=.4,fill="#B22222")+labs(title="Gross     ")+
+  theme_minimal()
+dist_runtime<-ggplot(data) +
+  aes(x = runtime) +
+  geom_histogram(aes(y=..density..),bins = 30L, fill = "#E69F00") +
+  geom_density(lwd=1,alpha=.4,fill="#E69F00")+labs(title="runtime     ")+
+  theme_minimal()
+dist_rating<-ggplot(data) +
+  aes(x = rating) +
+  geom_histogram(aes(y=..density..),bins = 30L, fill = "#56B4E9") +
+  geom_density(lwd=1,alpha=.4,fill="#56B4E9")+labs(title="rating     ")+
+  theme_minimal()
+dist_metascore<-ggplot(data) +
+  aes(x = metascore) +
+  geom_histogram(aes(y=..density..),bins = 30L, fill = "#009E73") +
+  geom_density(lwd=1,alpha=.4,fill="#009E73")+labs(title="metascore     ")+
+  theme_minimal()
+dist_votes<-ggplot(data) +
+  aes(x = votes) +
+  geom_histogram(aes(y=..density..),bins = 30L, fill = "#F0E442") +
+  geom_density(lwd=1,alpha=.4,fill="#F0E442")+labs(title="votes     ")+
+  theme_minimal()
+
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=9, fig.cap="EDA: distribution plots"}
+grid.arrange(dist_gross, dist_runtime, dist_rating, dist_metascore, dist_votes, ncol = 3, nrow = 2)
+
+```
+
+
+```{r include=FALSE}
+metascore_by_genre1 <- ggplot(data = data) + 
+  aes(x = log(metascore + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(genre1)), size = .6) + 
+  geom_smooth(aes(color = factor(genre1)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Metascore", x = "log(average metascore)", y = "log(gross)")
+
+votes_by_genre1 <- ggplot(data = data) + 
+  aes(x = log(votes + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(genre1)), size = .6) + 
+  geom_smooth(aes(color = factor(genre1)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Votes", x = "log(average votes)", y = "log(gross)")
+
+metascore_by_decade <- ggplot(data = data) + 
+  aes(x = log(metascore + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(decade)), size = .6) + 
+  geom_smooth(aes(color = factor(decade)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs metascore", x = "log(average metascore)", y = "log(gross)")
+
+votes_by_decade <- ggplot(data = data) + 
+  aes(x = log(votes + 1), y = log(gross)) + 
+  geom_point(aes(color = factor(decade)), size = .6) + 
+  geom_smooth(aes(color = factor(decade)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(title = "(a) Gross vs Votes", x = "log(average votes)", y = "log(gross)")
+```
+
+
+```{r}
+grid.arrange(metascore_by_genre1, metascore_by_decade, ncol = 2)
+
+grid.arrange(votes_by_genre1, votes_by_decade, ncol = 2)
+
+
+```
+
