@@ -114,6 +114,12 @@ average_data_decade <- data %>% group_by(decade) %>%
             votes             = round(mean(votes)       , digits = 1),
             gross             = round(mean(gross)       , digits = 1)
   )
+
+```
+
+I get the average values of data group by genre and decade
+
+```{r}
 average_data_genre
 average_data_decade
 ```
