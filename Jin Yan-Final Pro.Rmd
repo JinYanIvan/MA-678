@@ -220,7 +220,7 @@ log_data$votes<-log(log_data$votes +1)
 log_data$gross<-log(log_data$gross +1)
 ```
 
-###correlation between 
+### correlation between 
 ```{r echo=FALSE, fig.height=5, fig.width=7,fig.cap="Correlation Matrix"}
 chart.Correlation(log_data[3:7],histogram=TRUE,pch=20)
 ```
